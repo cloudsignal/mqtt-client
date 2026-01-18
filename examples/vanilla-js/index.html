@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CloudSignal MQTT - Vanilla JS Example</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    body {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    h1 {
+      color: #333;
+    }
+    .card {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-weight: 500;
+    }
+    .status.connected {
+      background: #d4edda;
+      color: #155724;
+    }
+    .status.disconnected {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    .status.connecting {
+      background: #fff3cd;
+      color: #856404;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 500;
+      color: #555;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-bottom: 15px;
+      font-size: 14px;
+    }
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: #007bff;
+    }
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      margin-right: 10px;
+      margin-bottom: 10px;
+    }
+    .btn-primary {
+      background: #007bff;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #0056b3;
+    }
+    .btn-primary:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .btn-secondary {
+      background: #6c757d;
+      color: white;
+    }
+    .btn-danger {
+      background: #dc3545;
+      color: white;
+    }
+    .messages {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 10px;
+      background: #fafafa;
+    }
+    .message {
+      padding: 8px;
+      margin-bottom: 8px;
+      background: white;
+      border-radius: 4px;
+      border-left: 3px solid #007bff;
+    }
+    .message-topic {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 4px;
+    }
+    .message-payload {
+      font-family: monospace;
+      font-size: 13px;
+      word-break: break-all;
+    }
+    .message-time {
+      font-size: 11px;
+      color: #999;
+      margin-top: 4px;
+    }
+    .empty {
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      padding: 20px;
+    }
+    .row {
+      display: flex;
+      gap: 15px;
+    }
+    .row > * {
+      flex: 1;
+    }
+    .log {
+      font-family: monospace;
+      font-size: 12px;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 15px;
+      border-radius: 4px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .log-entry {
+      margin-bottom: 4px;
+    }
+    .log-entry.error {
+      color: #f48771;
+    }
+    .log-entry.success {
+      color: #89d185;
+    }
+    .log-entry.info {
+      color: #6cb6ff;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔌 CloudSignal MQTT Demo</h1>
+
+  <!-- Connection Status -->
+  <div class="card">
+    <h3>Connection Status</h3>
+    <div id="status" class="status disconnected">
+      <span class="dot"></span>
+      <span id="status-text">Disconnected</span>
+    </div>
+  </div>
+
+  <!-- Connection Form -->
+  <div class="card">
+    <h3>Connect</h3>
+    <div class="row">
+      <div>
+        <label for="org-id">Organization ID</label>
+        <input type="text" id="org-id" placeholder="your-org-uuid">
+      </div>
+      <div>
+        <label for="secret-key">Secret Key</label>
+        <input type="password" id="secret-key" placeholder="cs_live_xxxxx">
+      </div>
+    </div>
+    <div>
+      <label for="user-email">User Email</label>
+      <input type="email" id="user-email" placeholder="user@example.com">
+    </div>
+    <button id="btn-connect" class="btn-primary">Connect</button>
+    <button id="btn-disconnect" class="btn-danger" disabled>Disconnect</button>
+  </div>
+
+  <!-- Subscribe -->
+  <div class="card">
+    <h3>Subscribe</h3>
+    <div class="row">
+      <div>
+        <label for="sub-topic">Topic</label>
+        <input type="text" id="sub-topic" placeholder="my/topic/#" value="test/demo">
+      </div>
+    </div>
+    <button id="btn-subscribe" class="btn-primary" disabled>Subscribe</button>
+    <button id="btn-unsubscribe" class="btn-secondary" disabled>Unsubscribe</button>
+    <div id="subscriptions" style="margin-top: 10px; font-size: 13px; color: #666;"></div>
+  </div>
+
+  <!-- Publish -->
+  <div class="card">
+    <h3>Publish</h3>
+    <div>
+      <label for="pub-topic">Topic</label>
+      <input type="text" id="pub-topic" placeholder="my/topic" value="test/demo">
+    </div>
+    <div>
+      <label for="pub-message">Message (JSON)</label>
+      <textarea id="pub-message" rows="3" placeholder='{"hello": "world"}'></textarea>
+    </div>
+    <button id="btn-publish" class="btn-primary" disabled>Publish</button>
+  </div>
+
+  <!-- Messages -->
+  <div class="card">
+    <h3>Messages</h3>
+    <div id="messages" class="messages">
+      <div class="empty">No messages yet. Subscribe to a topic to receive messages.</div>
+    </div>
+    <button id="btn-clear" class="btn-secondary" style="margin-top: 10px;">Clear Messages</button>
+  </div>
+
+  <!-- Debug Log -->
+  <div class="card">
+    <h3>Debug Log</h3>
+    <div id="log" class="log">
+      <div class="log-entry info">CloudSignal SDK ready. Enter credentials and click Connect.</div>
+    </div>
+  </div>
+
+  <!-- CloudSignal SDK from CDN -->
+  <script src="https://unpkg.com/@cloudsignal/mqtt-client@2.2.0/dist/index.global.js"></script>
+  
+  <script>
+    // =========================================================================
+    // DOM Elements
+    // =========================================================================
+    const $ = (id) => document.getElementById(id);
+    
+    const statusEl = $('status');
+    const statusText = $('status-text');
+    const orgIdInput = $('org-id');
+    const secretKeyInput = $('secret-key');
+    const userEmailInput = $('user-email');
+    const subTopicInput = $('sub-topic');
+    const pubTopicInput = $('pub-topic');
+    const pubMessageInput = $('pub-message');
+    const subscriptionsEl = $('subscriptions');
+    const messagesEl = $('messages');
+    const logEl = $('log');
+    
+    const btnConnect = $('btn-connect');
+    const btnDisconnect = $('btn-disconnect');
+    const btnSubscribe = $('btn-subscribe');
+    const btnUnsubscribe = $('btn-unsubscribe');
+    const btnPublish = $('btn-publish');
+    const btnClear = $('btn-clear');
+
+    // =========================================================================
+    // State
+    // =========================================================================
+    let client = null;
+    const subscriptions = new Set();
+    const messages = [];
+
+    // =========================================================================
+    // Logging
+    // =========================================================================
+    function log(message, type = '') {
+      const time = new Date().toLocaleTimeString();
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.textContent = `[${time}] ${message}`;
+      logEl.appendChild(entry);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // =========================================================================
+    // UI Updates
+    // =========================================================================
+    function updateStatus(status) {
+      statusEl.className = `status ${status}`;
+      statusText.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+      
+      const isConnected = status === 'connected';
+      btnConnect.disabled = isConnected;
+      btnDisconnect.disabled = !isConnected;
+      btnSubscribe.disabled = !isConnected;
+      btnUnsubscribe.disabled = !isConnected;
+      btnPublish.disabled = !isConnected;
+    }
+
+    function updateSubscriptions() {
+      if (subscriptions.size === 0) {
+        subscriptionsEl.textContent = 'No active subscriptions';
+      } else {
+        subscriptionsEl.textContent = 'Subscribed to: ' + Array.from(subscriptions).join(', ');
+      }
+    }
+
+    function addMessage(topic, payload) {
+      messages.unshift({ topic, payload, time: new Date() });
+      if (messages.length > 50) messages.pop();
+      
+      messagesEl.innerHTML = messages.map(msg => `
+        <div class="message">
+          <div class="message-topic">${escapeHtml(msg.topic)}</div>
+          <div class="message-payload">${escapeHtml(JSON.stringify(msg.payload, null, 2))}</div>
+          <div class="message-time">${msg.time.toLocaleTimeString()}</div>
+        </div>
+      `).join('');
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // =========================================================================
+    // CloudSignal Integration
+    // =========================================================================
+    async function connect() {
+      const orgId = orgIdInput.value.trim();
+      const secretKey = secretKeyInput.value.trim();
+      const userEmail = userEmailInput.value.trim();
+
+      if (!orgId || !secretKey || !userEmail) {
+        log('Please fill in all connection fields', 'error');
+        return;
+      }
+
+      try {
+        updateStatus('connecting');
+        log('Connecting to CloudSignal...');
+
+        // Create client with debug enabled
+        // CloudSignal is the global namespace from the IIFE bundle
+        client = new CloudSignal.default({
+          tokenServiceUrl: 'https://auth.cloudsignal.app',
+          preset: 'desktop',
+          debug: true,
+        });
+
+        // Set up event handlers
+        client.onConnectionStatusChange = (isConnected) => {
+          updateStatus(isConnected ? 'connected' : 'disconnected');
+          log(`Connection status: ${isConnected ? 'connected' : 'disconnected'}`, isConnected ? 'success' : '');
+        };
+
+        client.onReconnecting = (attempt) => {
+          updateStatus('connecting');
+          log(`Reconnecting... attempt #${attempt}`, 'info');
+        };
+
+        client.onAuthError = (error) => {
+          log(`Auth error: ${error.message}`, 'error');
+          updateStatus('disconnected');
+        };
+
+        // Set up message handler
+        client.onMessage((topic, message) => {
+          let payload;
+          try {
+            payload = JSON.parse(message);
+          } catch {
+            payload = message;
+          }
+          log(`Message on "${topic}"`, 'info');
+          addMessage(topic, payload);
+        });
+
+        // Connect with token authentication
+        await client.connectWithToken({
+          host: 'wss://connect.cloudsignal.app:18885/',
+          organizationId: orgId,
+          secretKey: secretKey,
+          userEmail: userEmail,
+        });
+
+        log('Connected successfully!', 'success');
+        
+      } catch (error) {
+        log(`Connection failed: ${error.message}`, 'error');
+        updateStatus('disconnected');
+        client = null;
+      }
+    }
+
+    function disconnect() {
+      if (client) {
+        client.destroy();
+        client = null;
+        subscriptions.clear();
+        updateSubscriptions();
+        log('Disconnected', 'info');
+        updateStatus('disconnected');
+      }
+    }
+
+    async function subscribe() {
+      const topic = subTopicInput.value.trim();
+      if (!topic) {
+        log('Please enter a topic to subscribe', 'error');
+        return;
+      }
+
+      try {
+        await client.subscribe(topic, 1);
+        subscriptions.add(topic);
+        updateSubscriptions();
+        log(`Subscribed to "${topic}"`, 'success');
+      } catch (error) {
+        log(`Subscribe failed: ${error.message}`, 'error');
+      }
+    }
+
+    async function unsubscribe() {
+      const topic = subTopicInput.value.trim();
+      if (!topic || !subscriptions.has(topic)) {
+        log('Not subscribed to this topic', 'error');
+        return;
+      }
+
+      try {
+        await client.unsubscribe(topic);
+        subscriptions.delete(topic);
+        updateSubscriptions();
+        log(`Unsubscribed from "${topic}"`, 'success');
+      } catch (error) {
+        log(`Unsubscribe failed: ${error.message}`, 'error');
+      }
+    }
+
+    function publish() {
+      const topic = pubTopicInput.value.trim();
+      const messageStr = pubMessageInput.value.trim();
+
+      if (!topic) {
+        log('Please enter a topic to publish', 'error');
+        return;
+      }
+
+      let payload;
+      try {
+        payload = messageStr ? JSON.parse(messageStr) : { timestamp: Date.now() };
+      } catch {
+        payload = messageStr || { timestamp: Date.now() };
+      }
+
+      try {
+        client.transmit(topic, payload, { qos: 1 });
+        log(`Published to "${topic}"`, 'success');
+      } catch (error) {
+        log(`Publish failed: ${error.message}`, 'error');
+      }
+    }
+
+    function clearMessages() {
+      messages.length = 0;
+      messagesEl.innerHTML = '<div class="empty">No messages yet.</div>';
+    }
+
+    // =========================================================================
+    // Event Listeners
+    // =========================================================================
+    btnConnect.addEventListener('click', connect);
+    btnDisconnect.addEventListener('click', disconnect);
+    btnSubscribe.addEventListener('click', subscribe);
+    btnUnsubscribe.addEventListener('click', unsubscribe);
+    btnPublish.addEventListener('click', publish);
+    btnClear.addEventListener('click', clearMessages);
+
+    // Enter key handlers
+    userEmailInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') connect();
+    });
+    subTopicInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') subscribe();
+    });
+
+    // Initialize
+    updateSubscriptions();
+  </script>
+</body>
+</html>
