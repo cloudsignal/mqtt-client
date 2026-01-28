@@ -1,118 +1,185 @@
-# Deployment Guide
+# CDN Deployment Guide
 
 ## Overview
 
-The CloudSignal MQTT Client is automatically published to npm and optionally synced to a public GitHub repository when a version tag is pushed.
-
-## Automated Deployment
-
-### Triggering a Release
-
-1. **Update version** in `package.json` and `version.md`
-2. **Commit changes**:
-   ```bash
-   git add .
-   git commit -m "chore: release v2.2.2"
-   ```
-3. **Create and push a version tag**:
-   ```bash
-   git tag v2.2.2
-   git push origin main --tags
-   ```
-
-The GitHub Action will automatically:
-- Build the library
-- Publish to npm as `@cloudsignal/mqtt-client`
-- Sync to the public repository (if configured)
+CloudSignalWS is automatically deployed to Cloudflare R2 when changes are pushed to the `cloudsignal-ws-client/` directory.
 
 ## Required GitHub Secrets
 
-Configure these in **Settings → Secrets and variables → Actions**:
+Configure these secrets in your GitHub repository:
 
-| Secret | Description | Required |
-|--------|-------------|----------|
-| `NPM_TOKEN` | npm automation token for publishing | Yes |
-| `PUBLIC_REPO_TOKEN` | GitHub PAT with repo access | Only if syncing to public repo |
+**Settings → Secrets and variables → Actions → New repository secret**
 
-### Optional Variables
+| Secret Name | Description | How to Get |
+|-------------|-------------|------------|
+| `R2_ACCOUNT_ID` | Cloudflare account ID | Dashboard URL or `wrangler whoami` |
+| `R2_ACCESS_KEY_ID` | R2 API access key | R2 → Manage R2 API Tokens → Create |
+| `R2_SECRET_ACCESS_KEY` | R2 API secret key | Same as above (shown once) |
+| `R2_CDN_BUCKET` | R2 bucket name (optional) | Defaults to `cloudsignal-cdn` if not set |
 
-Configure these in **Settings → Secrets and variables → Actions → Variables**:
+### Getting R2 Credentials
 
-| Variable | Description | Example |
-|----------|-------------|--------|
-| `PUBLIC_REPO` | Public repository to sync to | `cloudsignal-public/mqtt-client` |
+1. **Install Wrangler CLI** (if not already installed):
+   ```bash
+   npm install -g wrangler
+   ```
 
-## Getting npm Token
+2. **Login to Cloudflare**:
+   ```bash
+   wrangler login
+   ```
 
-1. Go to [npmjs.com](https://www.npmjs.com/) → **Access Tokens**
-2. Click **Generate New Token** → **Automation**
-3. Copy the token and add it as `NPM_TOKEN` secret
+3. **Get Account ID**:
+   ```bash
+   wrangler whoami
+   # Copy the "Account ID" value
+   ```
 
-## Setting Up Public Repo Sync (Optional)
+4. **Create R2 API Token**:
+   - Go to: https://dash.cloudflare.com/
+   - Navigate to: **R2** → **Manage R2 API Tokens**
+   - Click: **Create API Token**
+   - Permissions: **Object Read & Write**
+   - Copy **Access Key ID** and **Secret Access Key**
 
-If you want to sync releases to a public GitHub repository:
+## R2 Bucket Setup
 
-1. **Create a GitHub Personal Access Token (PAT)**:
-   - Go to GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
-   - Create token with `Contents: Read and write` permission for the target repo
-   - Add as `PUBLIC_REPO_TOKEN` secret
-
-2. **Set the PUBLIC_REPO variable**:
-   - Go to repo Settings → Secrets and variables → Actions → Variables
-   - Add `PUBLIC_REPO` with value like `cloudsignal-public/mqtt-client`
-
-## Manual Publishing
-
-If you need to publish manually:
+### Create CDN Bucket
 
 ```bash
+# Create bucket
+wrangler r2 bucket create cloudsignal-cdn
+
+# Verify
+wrangler r2 bucket list
+```
+
+### Configure Custom Domain (Optional)
+
+If you want to use `cdn.cloudsignal.io`:
+
+1. **Create R2 Custom Domain**:
+   - Go to: R2 → cloudsignal-cdn → Settings → Custom Domains
+   - Add domain: `cdn.cloudsignal.io`
+   - Follow DNS setup instructions
+
+2. **Update CNAME Record**:
+   - Add CNAME record: `cdn` → R2 domain provided by Cloudflare
+
+## Deployment Process
+
+### Automatic Deployment
+
+When you push changes to `cloudsignal-ws-client/`:
+
+1. **GitHub Actions** automatically:
+   - Installs dependencies
+   - Builds the library
+   - Creates versioned files
+   - Uploads to R2
+   - Commits to git
+   - Creates version tag
+
+### Manual Deployment
+
+If you need to deploy manually:
+
+```bash
+cd cloudsignal-ws-client
+
+# Install dependencies
+npm install
+
 # Build
 npm run build
 
-# Login to npm (if not already)
-npm login
+# Upload versioned file to R2 (requires AWS CLI configured)
+VERSION=$(node -p "require('./package.json').version")
+aws s3 cp cdn/CloudSignalWS.v${VERSION}.js \
+  s3://cloudsignal-cdn/CloudSignalWS.v${VERSION}.js \
+  --endpoint-url https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com \
+  --cache-control "public, max-age=31536000" \
+  --content-type "application/javascript"
 
-# Publish
-npm publish --access public
+# To update latest file manually (when ready):
+aws s3 cp cdn/CloudSignalWS.js \
+  s3://cloudsignal-cdn/CloudSignalWS.js \
+  --endpoint-url https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com \
+  --cache-control "public, max-age=3600" \
+  --content-type "application/javascript"
 ```
 
-## Package Distribution
+## File Structure in R2
 
-After publishing, the package is available via:
+**Note**: The automated build only uploads versioned files. The latest `CloudSignalWS.js` file is excluded to preserve your existing production file.
 
-### npm
-```bash
-npm install @cloudsignal/mqtt-client
+```
+cloudsignal-cdn/
+├── CloudSignalWS.js                    # Latest version (manually managed, not auto-uploaded)
+├── CloudSignalWS.v1.0.0.js            # Versioned files (auto-uploaded)
+├── CloudSignalWS.v1.0.1.js            # Versioned files (auto-uploaded)
+└── versions/
+    ├── v1.0.0/
+    │   ├── CloudSignalWS.js
+    │   └── manifest.json
+    └── v1.0.1/
+        ├── CloudSignalWS.js
+        └── manifest.json
 ```
 
-### CDN (via unpkg/jsdelivr)
-```html
-<!-- Latest -->
-<script src="https://unpkg.com/@cloudsignal/mqtt-client"></script>
+## Cache Headers
 
-<!-- Specific version -->
-<script src="https://unpkg.com/@cloudsignal/mqtt-client@2.2.2/dist/index.global.js"></script>
-```
+Files are uploaded with appropriate cache headers:
+
+- **Versioned files** (`CloudSignalWS.v1.0.0.js`): `max-age=31536000` (1 year)
+- **Version manifests**: `max-age=31536000` (1 year)
+
+## CDN URLs
+
+After deployment, versioned files are available at:
+
+- **Versioned**: `https://cdn.cloudsignal.io/CloudSignalWS.v1.0.0.js`
+- **Version manifest**: `https://cdn.cloudsignal.io/versions/v1.0.0/manifest.json`
+
+**Note**: The latest `CloudSignalWS.js` file is not automatically updated. You can manually update it when ready by uploading the desired versioned file.
 
 ## Troubleshooting
 
-### npm publish fails
+### Deployment Fails
 
-1. **Check NPM_TOKEN** is set correctly
-2. **Verify token permissions** (must be Automation type)
-3. **Check version** hasn't been published already
+1. **Check GitHub Secrets**:
+   - Verify all three R2 secrets are set correctly
+   - Ensure no extra spaces or newlines
 
-### Public repo sync fails
-
-1. **Check PUBLIC_REPO_TOKEN** has correct permissions
-2. **Verify PUBLIC_REPO** variable is set correctly
-3. **Ensure target repo exists**
-
-### Build fails
-
-1. Run locally to check for errors:
+2. **Check R2 Bucket**:
    ```bash
-   npm ci
-   npm run build
+   wrangler r2 bucket list
+   # Should show: cloudsignal-cdn
    ```
+
+3. **Test R2 Access**:
+   ```bash
+   aws s3 ls s3://cloudsignal-cdn/ \
+     --endpoint-url https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com
+   ```
+
+### Files Not Updating
+
+- Check GitHub Actions logs for errors
+- Verify R2 bucket permissions
+- Ensure custom domain is properly configured
+
+### Version Not Found
+
+- Check that version was bumped in `package.json`
+- Verify build completed successfully
+- Check R2 bucket for versioned files
+
+## Security Best Practices
+
+1. **Never commit secrets** to git
+2. **Use GitHub Secrets** for all credentials
+3. **Rotate R2 keys** periodically
+4. **Limit R2 token permissions** to minimum required
+5. **Monitor R2 access logs** for suspicious activity
 
