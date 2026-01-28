@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.2] - 2025-01-28
+
+### Added
+
+- **Next.js + Clerk Example**: Complete integration example for Clerk authentication
+  - `hooks/use-mqtt.ts` - MQTT hook with Clerk token handling and auto-reconnect on auth errors
+  - `contexts/mqtt-context.tsx` - React Context with typed helpers for notifications, transactions, and job progress
+  - Detailed README with Clerk JWT template configuration, topic structure, and troubleshooting
+- **Clerk Troubleshooting Section**: Added dedicated section in TROUBLESHOOTING.md for Clerk-specific issues
+  - Token expiry reconnect loop solutions
+  - JWT template email claim requirements
+  - JWKS URL configuration
+
+### Changed
+
+- Updated README Examples section to include Next.js + Clerk example
+
 ## [2.2.1] - 2025-01-15
 
 ### Added

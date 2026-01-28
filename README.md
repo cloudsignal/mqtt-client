@@ -379,6 +379,7 @@ npm run build        # Production build
 
 See the `examples/` directory for complete integrations:
 
+- **[Next.js + Clerk](./examples/nextjs-clerk/)** - Full React integration with Clerk auth, token refresh handling, and typed message helpers
 - **[Next.js + Supabase](./examples/nextjs-supabase/)** - Full React integration with token refresh and context provider
 - **[React Hooks](./examples/react-hooks/)** - Standalone React hooks for any React project
 - **[React Native](./examples/react-native/)** - Mobile app integration with mobile preset

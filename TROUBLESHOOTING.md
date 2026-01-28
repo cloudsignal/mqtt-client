@@ -403,6 +403,84 @@ const client = new CloudSignal({
 
 ---
 
+## Clerk Integration
+
+### Token Expiry Causes Reconnect Loop
+
+**Symptoms:**
+- SDK keeps trying to reconnect with the same expired token
+- Auth errors repeat in console
+
+**Solution:**
+
+The SDK's internal reconnect uses the original token. For Clerk (and other external IdPs), you need to:
+
+1. Set `reconnectOnAuthError: false` (default in v2.2.0+)
+2. Handle auth errors by destroying the client and reconnecting with a fresh token
+
+```typescript
+// Create client with auth error handling disabled
+const client = new CloudSignal({
+  reconnectOnAuthError: false,  // Don't retry with stale token
+});
+
+client.onAuthError = async (error) => {
+  console.log("Auth error, getting fresh token...");
+  
+  // Destroy current client
+  client.destroy();
+  
+  // Wait a moment
+  await new Promise(r => setTimeout(r, 3000));
+  
+  // Get fresh token from Clerk
+  const freshToken = await getToken();
+  
+  // Create new connection
+  const newClient = new CloudSignal({ /* ... */ });
+  await newClient.connectWithToken({
+    host: "wss://connect.cloudsignal.app:18885/",
+    organizationId: "your-org",
+    externalToken: freshToken,
+  });
+};
+```
+
+See `examples/nextjs-clerk/` for a complete implementation.
+
+### Clerk JWT Template Missing Email Claim
+
+**Symptoms:**
+- Token exchange fails with 422 error
+- "email claim required" error
+
+**Solution:**
+
+In Clerk Dashboard → JWT Templates, ensure your template includes the `email` claim:
+
+```json
+{
+  "email": "{{user.primary_email_address}}",
+  "user_id": "{{user.id}}"
+}
+```
+
+### JWKS URL Not Configured
+
+**Symptoms:**
+- Token validation fails
+- "Unable to verify JWT" error
+
+**Solution:**
+
+In CloudSignal Dashboard, configure the Clerk JWKS URL:
+
+```
+https://your-clerk-domain.clerk.accounts.dev/.well-known/jwks.json
+```
+
+---
+
 ## Still Having Issues?
 
 1. **Check the examples** in `examples/` for working implementations

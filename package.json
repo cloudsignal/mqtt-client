@@ -1,6 +1,6 @@
 {
   "name": "@cloudsignal/mqtt-client",
-"version": "2.2.1",
+"version": "2.2.2",
   "description": "CloudSignal WebSocket MQTT Client Library - Enterprise-grade MQTT client with V2 token management, AI agent communication patterns, and multi-transport support",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
